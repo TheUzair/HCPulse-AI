@@ -10,15 +10,16 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { aiApi } from "@/lib/api";
-import { ChatMessage } from "@/types";
+import { aiApi, hcpApi } from "@/lib/api";
+import { ChatMessage, HCP } from "@/types";
+import ReactMarkdown from "react-markdown";
 
 const SUGGESTIONS = [
-  "I just met with Dr. Johnson about CardioMax",
-  "Log my phone call with Dr. Chen about the oncology trial",
-  "Summarize my last interaction notes",
+  "I met with Dr. Johnson today to discuss CardioMax. Sentiment was positive and I shared brochures.",
+  "Edit: change the sentiment to negative and the type to phone call",
+  "Summarize: Discussed drug efficacy, side effects, pricing. Dr. Chen wants samples.",
   "What should I do next with Dr. Rodriguez?",
-  "Edit my last interaction to add follow-up notes",
+  "Tell me about Dr. Kim's interaction history",
 ];
 
 export function ChatMode() {
@@ -27,14 +28,87 @@ export function ChatMode() {
   const isLoading = useSelector((state: RootState) => state.chat.isLoading);
   const user = useSelector((state: RootState) => state.auth.user);
   const [input, setInput] = useState("");
+  const [hcps, setHcps] = useState<HCP[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load HCPs once for name → id resolution
+  useEffect(() => {
+    hcpApi.list({ limit: 100 }).then((res) => setHcps(res.data || [])).catch(() => { });
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  /**
+   * Resolve an HCP name from extracted_data to an actual HCP id.
+   * Matches first_name + last_name case-insensitively, stripping "Dr." prefix.
+   */
+  const resolveHcpId = (name: string): string => {
+    if (!name) return "";
+    const clean = name.replace(/^dr\.?\s*/i, "").trim().toLowerCase();
+    const parts = clean.split(/\s+/);
+    const match = hcps.find((h) => {
+      const full = `${h.first_name} ${h.last_name}`.toLowerCase();
+      const last = h.last_name.toLowerCase();
+      if (parts.length >= 2) return full.includes(parts[0]) && full.includes(parts[parts.length - 1]);
+      return last === parts[0] || full.includes(parts[0]);
+    });
+    return match?.id || "";
+  };
+
+  /**
+   * Map extracted_data from the AI response to InteractionDraft fields
+   * and dispatch syncFromChat to update the left-side form.
+   */
+  const syncExtractedToForm = async (extracted: Record<string, unknown>) => {
+    const formUpdate: Record<string, unknown> = {};
+
+    // Text / scalar fields
+    if (extracted.notes) formUpdate.notes = extracted.notes;
+    if (extracted.summary) formUpdate.outcomes = extracted.summary;
+    if (extracted.interaction_type) formUpdate.interaction_type = extracted.interaction_type;
+    if (extracted.date) formUpdate.date = extracted.date;
+    if (extracted.sentiment) formUpdate.sentiment = extracted.sentiment;
+    if (extracted.follow_up_date) formUpdate.follow_up_date = extracted.follow_up_date;
+
+    // Array fields
+    if (Array.isArray(extracted.products_discussed)) formUpdate.products_discussed = extracted.products_discussed;
+    if (Array.isArray(extracted.key_topics)) formUpdate.topics_discussed = extracted.key_topics;
+    if (Array.isArray(extracted.follow_up_actions)) formUpdate.follow_up_actions = extracted.follow_up_actions;
+    if (Array.isArray(extracted.materials_shared)) formUpdate.materials_shared = extracted.materials_shared;
+    if (Array.isArray(extracted.samples_distributed)) formUpdate.samples_distributed = extracted.samples_distributed;
+    if (Array.isArray(extracted.attendees)) formUpdate.attendees = extracted.attendees;
+
+    // Resolve HCP name → id, auto-create if not found
+    if (extracted.hcp_name) {
+      let hcpId = resolveHcpId(extracted.hcp_name as string);
+      if (!hcpId) {
+        // Auto-create the HCP
+        try {
+          const name = (extracted.hcp_name as string).replace(/^dr\.?\s*/i, "").trim();
+          const parts = name.split(/\s+/);
+          const firstName = parts[0] || name;
+          const lastName = parts.slice(1).join(" ") || name;
+          const newHcp = await hcpApi.create({ first_name: firstName, last_name: lastName });
+          if (newHcp?.id) {
+            hcpId = newHcp.id;
+            setHcps((prev) => [...prev, newHcp]);
+          }
+        } catch {
+          // ignore creation error
+        }
+      }
+      if (hcpId) formUpdate.hcp_id = hcpId;
+    }
+
+    if (Object.keys(formUpdate).length > 0) {
+      dispatch(syncFromChat(formUpdate));
+    }
+  };
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -70,16 +144,9 @@ export function ChatMode() {
 
       dispatch(addMessage(assistantMessage));
 
-      // Sync extracted data to form draft if interaction was logged
+      // Sync extracted data to form draft
       if (res.data?.extracted_data) {
-        const extracted = res.data.extracted_data;
-        dispatch(
-          syncFromChat({
-            notes: extracted.notes || "",
-            products_discussed: extracted.products_discussed || [],
-            follow_up_actions: extracted.follow_up_actions || [],
-          })
-        );
+        syncExtractedToForm(res.data.extracted_data);
       }
     } catch (err) {
       const errorMessage: ChatMessage = {
@@ -100,7 +167,7 @@ export function ChatMode() {
   };
 
   return (
-    <div className="flex h-[600px] flex-col rounded-lg border bg-background">
+    <div className="flex h-full flex-col rounded-lg border bg-background">
       {/* Chat Messages */}
       <ScrollArea className="flex-1 p-4" ref={scrollRef}>
         {messages.length === 0 ? (
@@ -113,7 +180,7 @@ export function ChatMode() {
             <div className="text-center">
               <h3 className="text-lg font-semibold">AI Interaction Assistant</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Describe your HCP interaction and I&apos;ll help you log it.
+                Describe your HCP interaction and I&apos;ll fill the form automatically.
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
@@ -142,14 +209,20 @@ export function ChatMode() {
                 )}
                 <div
                   className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
                     }`}
                 >
-                  <div className="whitespace-pre-wrap">{message.content}</div>
-                  {message.toolUsed && (
+                  <div className="whitespace-pre-wrap prose prose-sm dark:prose-invert max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1">
+                    {message.role === "assistant" ? (
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    ) : (
+                      message.content
+                    )}
+                  </div>
+                  {message.toolUsed && message.toolUsed !== "general" && (
                     <Badge variant="outline" className="mt-2 text-[10px]">
-                      Tool: {message.toolUsed}
+                      🔧 {message.toolUsed.replace(/_/g, " ")}
                     </Badge>
                   )}
                 </div>
@@ -199,7 +272,7 @@ export function ChatMode() {
           </Button>
         </div>
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          Powered by Groq AI &middot; gemma2-9b-it
+          Powered by LangGraph + Groq AI &middot; 5 tools: log, edit, context, suggest, summarize
         </p>
       </div>
     </div>
