@@ -17,7 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUser({
           id: (session.user as any).id || "demo-user-id",
           name: session.user.name || "Demo User",
-          email: session.user.email || "demo@aivoa.com",
+          email: session.user.email || "demo@hcpulse.ai",
           image: session.user.image || undefined,
         })
       );
@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUser({
           id: "demo-user-id",
           name: "John Smith",
-          email: "rep@aivoa.com",
+          email: "rep@hcpulse.ai",
         })
       );
     }

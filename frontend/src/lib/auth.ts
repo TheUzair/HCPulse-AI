@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
         return {
           id: "demo-user-id",
           name: "John Smith",
-          email: "rep@aivoa.com",
+          email: "rep@hcpulse.ai",
           image: null,
         };
       },

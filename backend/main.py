@@ -14,7 +14,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AIVOA CRM - HCP Module",
+    title="HCPulse AI - HCP Module",
     description="AI-First CRM system for Healthcare Professional interactions",
     version="1.0.0",
     lifespan=lifespan,
@@ -35,7 +35,7 @@ app.include_router(ai_router, prefix="/api")
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "service": "aivoa-crm-backend"}
+    return {"status": "healthy", "service": "hcpulse-ai-backend"}
 
 
 @app.get("/api/seed")
@@ -54,15 +54,15 @@ async def seed_data():
 
         # ── Users ──
         admin = User(
-            id=uuid.uuid4(), email="admin@aivoa.com", name="Uzair Ahmed",
+            id=uuid.uuid4(), email="admin@hcpulse.ai", name="Uzair Ahmed",
             role=UserRole.ADMIN,
         )
         rep = User(
-            id=uuid.uuid4(), email="rep@aivoa.com", name="John Smith",
+            id=uuid.uuid4(), email="rep@hcpulse.ai", name="John Smith",
             role=UserRole.REP,
         )
         manager = User(
-            id=uuid.uuid4(), email="manager@aivoa.com", name="Lisa Park",
+            id=uuid.uuid4(), email="manager@hcpulse.ai", name="Lisa Park",
             role=UserRole.MANAGER,
         )
         session.add_all([admin, rep, manager])

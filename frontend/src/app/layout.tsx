@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "AIVOA CRM — AI-First Healthcare CRM",
+  title: "HCPulse AI — AI-First Healthcare CRM",
   description: "AI-powered CRM system for managing Healthcare Professional interactions",
 };
 

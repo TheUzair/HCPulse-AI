@@ -4,7 +4,7 @@ import json
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/aivoa_crm"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/hcpulse_db"
     GROQ_API_KEY: str = ""
     JWT_SECRET: str = "change-me-in-production"
     FRONTEND_URL: str = "http://localhost:3000"
