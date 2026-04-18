@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,14 +11,16 @@ import { interactionApi } from "@/lib/api";
 import { Interaction } from "@/types";
 
 export default function InteractionsPage() {
+  const user = useSelector((state: RootState) => state.auth.user);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user?.id) return;
     async function load() {
       try {
-        const res = await interactionApi.list({ limit: 50 });
+        const res = await interactionApi.list({ limit: 50, user_id: user!.id });
         setInteractions(res.data || []);
         setTotal(res.total || 0);
       } catch (err) {
@@ -26,7 +30,7 @@ export default function InteractionsPage() {
       }
     }
     load();
-  }, []);
+  }, [user?.id]);
 
   const typeLabels: Record<string, string> = {
     in_person: "In Person",

@@ -17,8 +17,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { hcpApi, interactionApi } from "@/lib/api";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { hcpApi, interactionApi, aiApi } from "@/lib/api";
 import { HCP } from "@/types";
+import { cn } from "@/lib/utils";
 
 export function FormMode() {
   const dispatch = useDispatch();
@@ -26,9 +36,19 @@ export function FormMode() {
   const isSubmitting = useSelector((state: RootState) => state.interaction.isSubmitting);
   const user = useSelector((state: RootState) => state.auth.user);
   const [hcps, setHcps] = useState<HCP[]>([]);
-  const [productInput, setProductInput] = useState("");
-  const [followUpInput, setFollowUpInput] = useState("");
+  const [hcpOpen, setHcpOpen] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  // Tag inputs
+  const [attendeeInput, setAttendeeInput] = useState("");
+  const [topicInput, setTopicInput] = useState("");
+  const [materialInput, setMaterialInput] = useState("");
+  const [sampleInput, setSampleInput] = useState("");
+  const [followUpInput, setFollowUpInput] = useState("");
+
+  // AI suggestions
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
 
   useEffect(() => {
     async function loadHCPs() {
@@ -42,42 +62,42 @@ export function FormMode() {
     loadHCPs();
   }, []);
 
-  const addProduct = () => {
-    if (productInput.trim()) {
-      dispatch(
-        updateDraft({
-          products_discussed: [...draft.products_discussed, productInput.trim()],
-        })
-      );
-      setProductInput("");
+  const selectedHcp = hcps.find((h) => h.id === draft.hcp_id);
+
+  // Generic add/remove for array fields
+  const addToArray = (field: string, value: string, setter: (v: string) => void) => {
+    if (value.trim()) {
+      const current = (draft as unknown as Record<string, unknown>)[field] as string[];
+      dispatch(updateDraft({ [field]: [...current, value.trim()] } as Partial<typeof draft>));
+      setter("");
     }
   };
 
-  const removeProduct = (index: number) => {
-    dispatch(
-      updateDraft({
-        products_discussed: draft.products_discussed.filter((_, i) => i !== index),
-      })
-    );
+  const removeFromArray = (field: string, index: number) => {
+    const current = (draft as unknown as Record<string, unknown>)[field] as string[];
+    dispatch(updateDraft({ [field]: current.filter((_, i) => i !== index) } as Partial<typeof draft>));
   };
 
-  const addFollowUp = () => {
-    if (followUpInput.trim()) {
-      dispatch(
-        updateDraft({
-          follow_up_actions: [...draft.follow_up_actions, followUpInput.trim()],
-        })
+  const fetchAiSuggestions = async () => {
+    if (!draft.hcp_id || !draft.notes) return;
+    setLoadingSuggestions(true);
+    try {
+      const res = await aiApi.chat(
+        `Based on this interaction: ${draft.notes}\nTopics: ${draft.topics_discussed.join(", ")}\nSentiment: ${draft.sentiment}\nSuggest 3 specific follow-up actions.`,
+        user?.id || "demo-user",
+        []
       );
-      setFollowUpInput("");
+      const lines = res.message
+        .split("\n")
+        .filter((l: string) => l.trim().match(/^[-•\d]/))
+        .map((l: string) => l.replace(/^[-•\d.)\s]+/, "").trim())
+        .filter(Boolean);
+      setAiSuggestions(lines.length > 0 ? lines.slice(0, 5) : [res.message]);
+    } catch {
+      setAiSuggestions(["Could not generate suggestions. Please try again."]);
+    } finally {
+      setLoadingSuggestions(false);
     }
-  };
-
-  const removeFollowUp = (index: number) => {
-    dispatch(
-      updateDraft({
-        follow_up_actions: draft.follow_up_actions.filter((_, i) => i !== index),
-      })
-    );
   };
 
   const handleSubmit = async () => {
@@ -104,37 +124,70 @@ export function FormMode() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {submitSuccess && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
           Interaction logged successfully!
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* HCP Selection */}
-        <div className="space-y-2">
-          <Label htmlFor="hcp">Healthcare Professional *</Label>
-          <Select
-            value={draft.hcp_id}
-            onValueChange={(value) => dispatch(updateDraft({ hcp_id: value }))}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select an HCP" />
-            </SelectTrigger>
-            <SelectContent>
-              {hcps.map((hcp) => (
-                <SelectItem key={hcp.id} value={hcp.id}>
-                  Dr. {hcp.first_name} {hcp.last_name} — {hcp.specialty}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+      {/* HCP Selection — Command Popover */}
+      <div className="space-y-2">
+        <Label>Healthcare Professional *</Label>
+        <Popover open={hcpOpen} onOpenChange={setHcpOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={hcpOpen}
+              className="w-full justify-between font-normal"
+            >
+              {selectedHcp
+                ? `Dr. ${selectedHcp.first_name} ${selectedHcp.last_name} — ${selectedHcp.specialty || "General"}`
+                : "Search or select HCP..."}
+              <svg className="ml-2 h-4 w-4 shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+              </svg>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Search HCP by name or specialty..." />
+              <CommandList>
+                <CommandEmpty>No HCP found.</CommandEmpty>
+                <CommandGroup>
+                  {hcps.map((hcp) => (
+                    <CommandItem
+                      key={hcp.id}
+                      value={`${hcp.first_name} ${hcp.last_name} ${hcp.specialty}`}
+                      onSelect={() => {
+                        dispatch(updateDraft({ hcp_id: hcp.id }));
+                        setHcpOpen(false);
+                      }}
+                    >
+                      <svg
+                        className={cn("mr-2 h-4 w-4", draft.hcp_id === hcp.id ? "opacity-100" : "opacity-0")}
+                        fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium">Dr. {hcp.first_name} {hcp.last_name}</p>
+                        <p className="text-xs text-muted-foreground">{hcp.specialty || "General"} · {hcp.organization || ""}</p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
 
-        {/* Interaction Type */}
+      {/* Interaction Type + Date + Time */}
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
-          <Label htmlFor="type">Interaction Type *</Label>
+          <Label>Interaction Type *</Label>
           <Select
             value={draft.interaction_type}
             onValueChange={(value) => dispatch(updateDraft({ interaction_type: value }))}
@@ -150,114 +203,195 @@ export function FormMode() {
             </SelectContent>
           </Select>
         </div>
-
-        {/* Date */}
         <div className="space-y-2">
-          <Label htmlFor="date">Date *</Label>
+          <Label>Date *</Label>
           <Input
-            id="date"
             type="date"
             value={draft.date}
             onChange={(e) => dispatch(updateDraft({ date: e.target.value }))}
           />
         </div>
-
-        {/* Follow-up Date */}
         <div className="space-y-2">
-          <Label htmlFor="follow_up_date">Follow-up Date</Label>
+          <Label>Time</Label>
           <Input
-            id="follow_up_date"
-            type="date"
-            value={draft.follow_up_date || ""}
-            onChange={(e) =>
-              dispatch(updateDraft({ follow_up_date: e.target.value || undefined }))
-            }
+            type="time"
+            value={draft.time}
+            onChange={(e) => dispatch(updateDraft({ time: e.target.value }))}
           />
         </div>
       </div>
 
-      {/* Notes */}
+      {/* Attendees */}
+      <TagField
+        label="Attendees"
+        placeholder="Add attendee name..."
+        items={draft.attendees}
+        input={attendeeInput}
+        setInput={setAttendeeInput}
+        onAdd={() => addToArray("attendees", attendeeInput, setAttendeeInput)}
+        onRemove={(i) => removeFromArray("attendees", i)}
+      />
+
+      {/* Topics Discussed */}
+      <TagField
+        label="Topics Discussed"
+        placeholder="Add a topic..."
+        items={draft.topics_discussed}
+        input={topicInput}
+        setInput={setTopicInput}
+        onAdd={() => addToArray("topics_discussed", topicInput, setTopicInput)}
+        onRemove={(i) => removeFromArray("topics_discussed", i)}
+      />
+
+      {/* Voice Note Option */}
+      <div className="flex items-center gap-3 rounded-lg border p-3">
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={draft.voice_note_consent}
+          onClick={() => dispatch(updateDraft({ voice_note_consent: !draft.voice_note_consent }))}
+          className={cn(
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
+            draft.voice_note_consent
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-input"
+          )}
+        >
+          {draft.voice_note_consent && (
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          )}
+        </button>
+        <div>
+          <p className="text-sm font-medium">Summarize from voice note</p>
+          <p className="text-xs text-muted-foreground">Requires consent from all participants</p>
+        </div>
+      </div>
+
+      {/* Materials Shared */}
+      <TagField
+        label="Materials Shared"
+        placeholder="Search or add material..."
+        items={draft.materials_shared}
+        input={materialInput}
+        setInput={setMaterialInput}
+        onAdd={() => addToArray("materials_shared", materialInput, setMaterialInput)}
+        onRemove={(i) => removeFromArray("materials_shared", i)}
+      />
+
+      {/* Samples Distributed */}
+      <TagField
+        label="Samples Distributed"
+        placeholder="Add sample..."
+        items={draft.samples_distributed}
+        input={sampleInput}
+        setInput={setSampleInput}
+        onAdd={() => addToArray("samples_distributed", sampleInput, setSampleInput)}
+        onRemove={(i) => removeFromArray("samples_distributed", i)}
+      />
+
+      {/* Sentiment */}
       <div className="space-y-2">
-        <Label htmlFor="notes">Interaction Notes</Label>
+        <Label>Observed / Inferred HCP Sentiment</Label>
+        <div className="flex gap-2">
+          {(["positive", "neutral", "negative"] as const).map((s) => (
+            <Button
+              key={s}
+              type="button"
+              variant={draft.sentiment === s ? "default" : "outline"}
+              size="sm"
+              className={cn(
+                "flex-1 capitalize",
+                draft.sentiment === s && s === "positive" && "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700",
+                draft.sentiment === s && s === "neutral" && "bg-amber-500 hover:bg-amber-600 dark:bg-amber-600",
+                draft.sentiment === s && s === "negative" && "bg-red-600 hover:bg-red-700 dark:bg-red-700"
+              )}
+              onClick={() => dispatch(updateDraft({ sentiment: draft.sentiment === s ? "" : s }))}
+            >
+              {s === "positive" && "😊 "}
+              {s === "neutral" && "😐 "}
+              {s === "negative" && "😞 "}
+              {s}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Outcomes */}
+      <div className="space-y-2">
+        <Label>Outcomes</Label>
         <Textarea
-          id="notes"
-          placeholder="Describe the interaction details, key discussion points, and outcomes..."
-          className="min-h-[120px]"
-          value={draft.notes}
-          onChange={(e) => dispatch(updateDraft({ notes: e.target.value }))}
+          placeholder="Key outcomes from this interaction..."
+          className="min-h-[80px]"
+          value={draft.outcomes}
+          onChange={(e) => dispatch(updateDraft({ outcomes: e.target.value }))}
         />
       </div>
 
-      {/* Products Discussed */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Products Discussed</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add a product..."
-              value={productInput}
-              onChange={(e) => setProductInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addProduct())}
-            />
-            <Button type="button" variant="outline" onClick={addProduct}>
-              Add
-            </Button>
-          </div>
-          {draft.products_discussed.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {draft.products_discussed.map((product, i) => (
-                <Badge key={i} variant="secondary" className="gap-1">
-                  {product}
-                  <button
-                    onClick={() => removeProduct(i)}
-                    className="ml-1 rounded-full hover:bg-muted-foreground/20"
-                  >
-                    <svg className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
-                      <path d="M3.05 3.05a.75.75 0 011.06 0L6 4.94l1.89-1.89a.75.75 0 111.06 1.06L7.06 6l1.89 1.89a.75.75 0 11-1.06 1.06L6 7.06 4.11 8.95a.75.75 0 01-1.06-1.06L4.94 6 3.05 4.11a.75.75 0 010-1.06z" />
-                    </svg>
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Follow-up Actions */}
+      <TagField
+        label="Follow-up Actions"
+        placeholder="Add a follow-up action..."
+        items={draft.follow_up_actions}
+        input={followUpInput}
+        setInput={setFollowUpInput}
+        onAdd={() => addToArray("follow_up_actions", followUpInput, setFollowUpInput)}
+        onRemove={(i) => removeFromArray("follow_up_actions", i)}
+        asList
+      />
+
+      {/* AI Suggested Follow-ups */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Follow-up Actions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Add a follow-up action..."
-              value={followUpInput}
-              onChange={(e) => setFollowUpInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addFollowUp())}
-            />
-            <Button type="button" variant="outline" onClick={addFollowUp}>
-              Add
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-medium">AI Suggested Follow-ups</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={fetchAiSuggestions}
+              disabled={loadingSuggestions || !draft.notes}
+            >
+              {loadingSuggestions ? (
+                <svg className="mr-1 h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <svg className="mr-1 h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              )}
+              Generate
             </Button>
           </div>
-          {draft.follow_up_actions.length > 0 && (
+        </CardHeader>
+        <CardContent>
+          {aiSuggestions.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Fill in the form and click Generate for AI-powered follow-up suggestions.
+            </p>
+          ) : (
             <div className="space-y-2">
-              {draft.follow_up_actions.map((action, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-md border p-2 text-sm"
-                >
-                  <span>{action}</span>
-                  <button
-                    onClick={() => removeFollowUp(i)}
-                    className="text-muted-foreground hover:text-destructive"
+              {aiSuggestions.map((suggestion, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-md border p-2 text-sm">
+                  <span className="flex-1">{suggestion}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => {
+                      dispatch(
+                        updateDraft({
+                          follow_up_actions: [...draft.follow_up_actions, suggestion],
+                        })
+                      );
+                    }}
                   >
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                    + Add
+                  </Button>
                 </div>
               ))}
             </div>
@@ -266,14 +400,11 @@ export function FormMode() {
       </Card>
 
       {/* Submit */}
-      <div className="flex justify-end gap-3">
-        <Button variant="outline" type="button">
-          Save Draft
-        </Button>
-        <Button onClick={handleSubmit} disabled={!draft.hcp_id || isSubmitting}>
+      <div className="flex justify-end gap-3 pt-2">
+        <Button onClick={handleSubmit} disabled={!draft.hcp_id || isSubmitting} className="min-w-[140px]">
           {isSubmitting ? (
             <>
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -284,6 +415,78 @@ export function FormMode() {
           )}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// Reusable tag/list field component
+function TagField({
+  label,
+  placeholder,
+  items,
+  input,
+  setInput,
+  onAdd,
+  onRemove,
+  asList,
+}: {
+  label: string;
+  placeholder: string;
+  items: string[];
+  input: string;
+  setInput: (v: string) => void;
+  onAdd: () => void;
+  onRemove: (i: number) => void;
+  asList?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex gap-2">
+        <Input
+          placeholder={placeholder}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onAdd();
+            }
+          }}
+        />
+        <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={onAdd}>
+          Add
+        </Button>
+      </div>
+      {items.length > 0 && (
+        asList ? (
+          <div className="space-y-1.5">
+            {items.map((item, i) => (
+              <div key={i} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                <span>{item}</span>
+                <button onClick={() => onRemove(i)} className="text-muted-foreground hover:text-destructive">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {items.map((item, i) => (
+              <Badge key={i} variant="secondary" className="gap-1">
+                {item}
+                <button onClick={() => onRemove(i)} className="ml-0.5 rounded-full hover:bg-muted-foreground/20">
+                  <svg className="h-3 w-3" viewBox="0 0 12 12" fill="currentColor">
+                    <path d="M3.05 3.05a.75.75 0 011.06 0L6 4.94l1.89-1.89a.75.75 0 111.06 1.06L7.06 6l1.89 1.89a.75.75 0 11-1.06 1.06L6 7.06 4.11 8.95a.75.75 0 01-1.06-1.06L4.94 6 3.05 4.11a.75.75 0 010-1.06z" />
+                  </svg>
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )
+      )}
     </div>
   );
 }

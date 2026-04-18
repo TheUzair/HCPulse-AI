@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,7 @@ interface Stats {
 }
 
 export default function DashboardPage() {
+  const user = useSelector((state: RootState) => state.auth.user);
   const [stats, setStats] = useState<Stats>({
     totalHCPs: 0,
     totalInteractions: 0,
@@ -22,11 +25,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user?.id) return;
     async function loadStats() {
       try {
         const [hcpRes, ixRes] = await Promise.all([
           hcpApi.list({ limit: 1 }).catch(() => ({ total: 0 })),
-          interactionApi.list({ limit: 5 }).catch(() => ({ total: 0, data: [] })),
+          interactionApi.list({ limit: 5, user_id: user!.id }).catch(() => ({ total: 0, data: [] })),
         ]);
         setStats({
           totalHCPs: hcpRes.total || 0,
@@ -40,7 +44,7 @@ export default function DashboardPage() {
       }
     }
     loadStats();
-  }, []);
+  }, [user?.id]);
 
   const statCards = [
     {

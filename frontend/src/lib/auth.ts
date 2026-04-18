@@ -9,16 +9,26 @@ export const authOptions: NextAuthOptions = {
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     }),
     CredentialsProvider({
-      id: "demo",
-      name: "Demo",
-      credentials: {},
-      async authorize() {
-        return {
-          id: "demo-user-id",
-          name: "John Smith",
-          email: "rep@hcpulse.ai",
-          image: null,
-        };
+      id: "credentials",
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        // Demo credentials — fixed UUID must match backend seed data
+        if (
+          credentials?.email === "rep@hcpulse.ai" &&
+          credentials?.password === "demo1234"
+        ) {
+          return {
+            id: "00000000-0000-4000-a000-000000000002",
+            name: "John Smith",
+            email: "rep@hcpulse.ai",
+            image: null,
+          };
+        }
+        return null;
       },
     }),
   ],

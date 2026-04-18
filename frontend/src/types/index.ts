@@ -44,7 +44,15 @@ export interface InteractionDraft {
   hcp_id: string;
   interaction_type: string;
   date: string;
+  time: string;
+  attendees: string[];
+  topics_discussed: string[];
   notes: string;
+  voice_note_consent: boolean;
+  materials_shared: string[];
+  samples_distributed: string[];
+  sentiment: "positive" | "neutral" | "negative" | "";
+  outcomes: string;
   products_discussed: string[];
   follow_up_actions: string[];
   follow_up_date?: string;

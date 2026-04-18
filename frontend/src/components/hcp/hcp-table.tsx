@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -119,9 +120,11 @@ export function HCPTable() {
                       </div>
                     </td>
                     <td className="py-3">
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
+                      <Link href={`/dashboard/hcp/${hcp.id}`}>
+                        <Button variant="ghost" size="sm">
+                          View
+                        </Button>
+                      </Link>
                     </td>
                   </tr>
                 ))}

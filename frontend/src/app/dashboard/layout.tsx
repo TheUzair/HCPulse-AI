@@ -15,17 +15,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (session?.user) {
       dispatch(
         setUser({
-          id: (session.user as any).id || "demo-user-id",
+          id: (session.user as any).id || "00000000-0000-4000-a000-000000000002",
           name: session.user.name || "Demo User",
           email: session.user.email || "demo@hcpulse.ai",
           image: session.user.image || undefined,
         })
       );
     } else {
-      // Demo user fallback
+      // Demo user fallback — matches backend seed UUID
       dispatch(
         setUser({
-          id: "demo-user-id",
+          id: "00000000-0000-4000-a000-000000000002",
           name: "John Smith",
           email: "rep@hcpulse.ai",
         })

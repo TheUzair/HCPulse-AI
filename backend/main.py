@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from config import settings
 from database import init_db
@@ -33,13 +34,92 @@ app.include_router(interaction_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 
 
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Interactive landing page for the API."""
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HCPulse AI — API</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#fafafa;min-height:100vh;display:flex;align-items:center;justify-content:center}
+        .container{max-width:720px;width:100%;padding:2rem}
+        .logo{width:56px;height:56px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem}
+        .logo svg{width:28px;height:28px;color:#fff}
+        h1{font-size:2rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:0.25rem}
+        h1 span{background:linear-gradient(135deg,#6366f1,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .subtitle{color:#a1a1aa;font-size:0.95rem;margin-bottom:2rem}
+        .badge{display:inline-flex;align-items:center;gap:6px;background:#1a1a2e;border:1px solid #27272a;border-radius:9999px;padding:4px 14px;font-size:0.75rem;color:#a78bfa;margin-bottom:1.5rem}
+        .badge::before{content:'';width:6px;height:6px;background:#22c55e;border-radius:50%;animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:2rem}
+        .card{background:#111;border:1px solid #27272a;border-radius:12px;padding:1.25rem;transition:border-color .2s}
+        .card:hover{border-color:#6366f1}
+        .card h3{font-size:0.85rem;font-weight:600;margin-bottom:0.35rem}
+        .card p{font-size:0.78rem;color:#a1a1aa;line-height:1.5}
+        .endpoints{background:#111;border:1px solid #27272a;border-radius:12px;padding:1.25rem;margin-bottom:2rem}
+        .endpoints h3{font-size:0.85rem;font-weight:600;margin-bottom:0.75rem}
+        .endpoint{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.8rem;border-bottom:1px solid #1a1a1a}
+        .endpoint:last-child{border-bottom:none}
+        .method{font-size:0.7rem;font-weight:700;padding:2px 8px;border-radius:4px;min-width:44px;text-align:center}
+        .get{background:#064e3b;color:#34d399} .post{background:#1e3a5f;color:#60a5fa} .put{background:#713f12;color:#fbbf24} .del{background:#7f1d1d;color:#f87171}
+        .path{color:#d4d4d8;font-family:'SF Mono',Monaco,monospace}
+        .links{display:flex;gap:12px;flex-wrap:wrap}
+        .links a{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;font-size:0.85rem;font-weight:500;text-decoration:none;transition:all .2s}
+        .primary{background:#6366f1;color:#fff} .primary:hover{background:#4f46e5}
+        .secondary{background:#1a1a1a;color:#d4d4d8;border:1px solid #27272a} .secondary:hover{background:#27272a}
+        .footer{margin-top:3rem;text-align:center;font-size:0.75rem;color:#52525b}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo"><svg fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z"/></svg></div>
+        <div class="badge">Live</div>
+        <h1>HCPulse <span>AI</span> API</h1>
+        <p class="subtitle">AI-First CRM backend for Healthcare Professional interactions. Built with FastAPI, LangGraph &amp; Groq.</p>
+
+        <div class="cards">
+            <div class="card"><h3>🧠 AI-Powered</h3><p>Natural language interaction logging with LangGraph agent &amp; Groq LLMs for sentiment analysis &amp; follow-up suggestions.</p></div>
+            <div class="card"><h3>⚡ Async Stack</h3><p>FastAPI + SQLAlchemy 2.0 async with asyncpg for high-performance PostgreSQL operations.</p></div>
+            <div class="card"><h3>👥 HCP Directory</h3><p>Full CRUD for Healthcare Professionals with specialty, organization &amp; NPI tracking.</p></div>
+            <div class="card"><h3>🔒 Data Isolation</h3><p>Per-user interaction scoping ensures reps only see their own data. UUID-based identity.</p></div>
+        </div>
+
+        <div class="endpoints">
+            <h3>API Endpoints</h3>
+            <div class="endpoint"><span class="method get">GET</span><span class="path">/api/health</span></div>
+            <div class="endpoint"><span class="method get">GET</span><span class="path">/api/seed</span></div>
+            <div class="endpoint"><span class="method get">GET</span><span class="path">/api/hcp/</span></div>
+            <div class="endpoint"><span class="method post">POST</span><span class="path">/api/hcp/</span></div>
+            <div class="endpoint"><span class="method get">GET</span><span class="path">/api/interaction/</span></div>
+            <div class="endpoint"><span class="method post">POST</span><span class="path">/api/interaction/</span></div>
+            <div class="endpoint"><span class="method put">PUT</span><span class="path">/api/interaction/{id}</span></div>
+            <div class="endpoint"><span class="method del">DEL</span><span class="path">/api/interaction/{id}</span></div>
+            <div class="endpoint"><span class="method post">POST</span><span class="path">/api/ai/chat</span></div>
+        </div>
+
+        <div class="links">
+            <a href="/docs" class="primary">📄 Interactive Docs</a>
+            <a href="/redoc" class="secondary">📘 ReDoc</a>
+            <a href="/api/health" class="secondary">💚 Health Check</a>
+        </div>
+
+        <p class="footer">&copy; 2024 HCPulse AI &middot; v1.0.0 &middot; FastAPI + LangGraph + Groq</p>
+    </div>
+</body>
+</html>"""
+
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "service": "hcpulse-ai-backend"}
 
 
 @app.get("/api/seed")
-async def seed_data():
+async def seed_data(force: bool = False):
     """Seed realistic admin/rep data with HCPs, interactions, and activity logs."""
     from database import async_session
     from models.database_models import HCP, User, UserRole, Interaction, InteractionType, Sentiment, ActivityLog
@@ -47,22 +127,35 @@ async def seed_data():
     from datetime import date, datetime, timedelta
 
     async with async_session() as session:
-        from sqlalchemy import select, func
+        from sqlalchemy import select, func, delete
+
         count = await session.execute(select(func.count()).select_from(HCP))
         if count.scalar() > 0:
-            return {"message": "Data already seeded"}
+            if not force:
+                return {"message": "Data already seeded. Use ?force=true to re-seed."}
+            # Wipe existing data in correct order (respecting FK constraints)
+            await session.execute(delete(ActivityLog))
+            await session.execute(delete(Interaction))
+            await session.execute(delete(HCP))
+            await session.execute(delete(User))
+            await session.flush()
 
         # ── Users ──
+        # Fixed UUIDs so frontend auth can reference them
+        ADMIN_UUID = uuid.UUID("00000000-0000-4000-a000-000000000001")
+        REP_UUID = uuid.UUID("00000000-0000-4000-a000-000000000002")
+        MANAGER_UUID = uuid.UUID("00000000-0000-4000-a000-000000000003")
+
         admin = User(
-            id=uuid.uuid4(), email="admin@hcpulse.ai", name="Uzair Ahmed",
+            id=ADMIN_UUID, email="admin@hcpulse.ai", name="Uzair Ahmed",
             role=UserRole.ADMIN,
         )
         rep = User(
-            id=uuid.uuid4(), email="rep@hcpulse.ai", name="John Smith",
+            id=REP_UUID, email="rep@hcpulse.ai", name="John Smith",
             role=UserRole.REP,
         )
         manager = User(
-            id=uuid.uuid4(), email="manager@hcpulse.ai", name="Lisa Park",
+            id=MANAGER_UUID, email="manager@hcpulse.ai", name="Lisa Park",
             role=UserRole.MANAGER,
         )
         session.add_all([admin, rep, manager])

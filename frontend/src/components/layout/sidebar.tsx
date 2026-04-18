@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navigation = [
   {
@@ -46,6 +48,13 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+
+  const initials = session?.user?.name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase() || "U";
 
   return (
     <aside className="flex h-screen w-64 flex-col border-r bg-background">
@@ -64,8 +73,10 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navigation.map((item) => {
-          const isActive = pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          const isActive =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname === item.href;
           return (
             <Link
               key={item.name}
@@ -84,14 +95,27 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t p-4">
-        <div className="rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 p-3">
-          <p className="text-xs font-medium text-primary">AI-Powered CRM</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Log interactions via chat or form
-          </p>
+      {/* User info & Sign out — fixed at bottom */}
+      <div className="border-t p-3">
+        <div className="flex items-center gap-3 rounded-lg px-3 py-2">
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{session?.user?.name || "Field Rep"}</p>
+            <p className="truncate text-xs text-muted-foreground">{session?.user?.email || ""}</p>
+          </div>
         </div>
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+          </svg>
+          Sign Out
+        </button>
       </div>
     </aside>
   );
