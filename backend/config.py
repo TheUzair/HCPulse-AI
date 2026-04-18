@@ -24,7 +24,10 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return json.loads(self.CORS_ORIGINS)
+        origins = json.loads(self.CORS_ORIGINS)
+        if self.FRONTEND_URL and self.FRONTEND_URL not in origins:
+            origins.append(self.FRONTEND_URL)
+        return origins
 
     class Config:
         env_file = ".env"
