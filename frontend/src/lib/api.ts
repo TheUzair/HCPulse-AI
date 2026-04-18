@@ -2,17 +2,25 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   const url = `${API_URL}${endpoint}`;
+  const { headers, ...rest } = options;
   const res = await fetch(url, {
+    ...rest,
     headers: {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(headers as Record<string, string>),
     },
-    ...options,
   });
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: "Request failed" }));
-    throw new Error(error.detail || `API Error: ${res.status}`);
+    const detail = error.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((e: { loc?: string[]; msg?: string }) => `${(e.loc || []).join(".")}: ${e.msg}`).join("; ")
+          : `API Error: ${res.status}`;
+    throw new Error(message);
   }
 
   if (res.status === 204) return null;
