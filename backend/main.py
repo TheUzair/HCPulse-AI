@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -19,6 +20,7 @@ app = FastAPI(
     description="AI-First CRM system for Healthcare Professional interactions",
     version="1.0.0",
     lifespan=lifespan,
+    redoc_url=None,
 )
 
 app.add_middleware(
@@ -37,6 +39,7 @@ app.include_router(ai_router, prefix="/api")
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Interactive landing page for the API."""
+    year = datetime.now().year
     return """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -107,8 +110,28 @@ async def root():
             <a href="/api/health" class="secondary">💚 Health Check</a>
         </div>
 
-        <p class="footer">&copy; 2024 HCPulse AI &middot; v1.0.0 &middot; FastAPI + LangGraph + Groq</p>
+        <p class="footer">&copy; """ + str(datetime.now().year) + """ HCPulse AI &middot; v1.0.0 &middot; FastAPI + LangGraph + Groq</p>
     </div>
+</body>
+</html>"""
+
+
+@app.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
+async def custom_redoc():
+    """Custom ReDoc page with pinned CDN version."""
+    return """<!DOCTYPE html>
+<html>
+<head>
+    <title>HCPulse AI — API Reference</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <redoc spec-url='/openapi.json'></redoc>
+    <script src="https://cdn.redoc.ly/redoc/v2.1.5/bundles/redoc.standalone.js"></script>
 </body>
 </html>"""
 
