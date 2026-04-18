@@ -20,7 +20,7 @@ FastAPI backend with LangGraph AI agent for the HCPulse AI CRM system.
 
 ```
 backend/
-├── main.py                          # FastAPI app, CORS, lifespan, seed endpoint
+├── main.py                          # FastAPI app, CORS, lifespan, routers
 ├── config.py                        # Pydantic Settings (env vars)
 ├── database.py                      # Async SQLAlchemy engine + session
 │
@@ -73,9 +73,6 @@ cp .env.example .env
 
 # Start server (auto-creates tables on startup)
 uvicorn main:app --reload --port 8000
-
-# Seed sample data
-curl http://localhost:8000/api/seed
 ```
 
 ---
@@ -131,12 +128,6 @@ Body: { "message": "...", "user_id": "uuid", "history": [...] }
 Response: { "message": "...", "tool_used": "log_interaction", "data": {...} }
 ```
 
-### Seed Data
-
-```
-GET /api/seed → Seeds 3 users, 10 HCPs, 8 interactions
-```
-
 ---
 
 ## LangGraph Agent
@@ -188,13 +179,3 @@ class AgentState(TypedDict):
 ### ActivityLog
 
 - `id` (UUID PK), `user_id` (FK→users), `action`, `entity_type`, `entity_id`, `details` (JSON), `created_at`
-
----
-
-## Seed Data
-
-The `/api/seed` endpoint creates:
-
-- **3 Users:** Admin (Uzair Ahmed), Rep (John Smith), Manager (Lisa Park)
-- **10 HCPs:** Across Cardiology, Oncology, Neurology, Endocrinology, Rheumatology, Pulmonology, Dermatology, Gastroenterology, Pediatrics, Orthopedics
-- **8 Interactions:** Realistic pharma rep logs with products (CardioMax, OncoShield, NeuroCalm, GlucoSteady, FlexiJoint, BreatheEasy, DermaClear, GutBalance), sentiments, and follow-up actions

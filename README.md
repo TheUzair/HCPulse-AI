@@ -79,7 +79,7 @@ HCPulse-AI/
 │   ├── repositories/                # Data access (query builders)
 │   ├── services/                    # Business logic layer
 │   ├── routers/                     # FastAPI route handlers
-│   ├── main.py                      # App entry + seed data endpoint
+│   ├── main.py                      # App entry point
 │   ├── config.py                    # Environment configuration
 │   ├── database.py                  # Async engine + session factory
 │   └── requirements.txt
@@ -168,14 +168,6 @@ This starts both servers concurrently:
 - **Frontend** → http://localhost:3000
 - **Backend API** → http://localhost:8000
 - **API Docs** → http://localhost:8000/docs
-
-### 4. Seed Sample Data
-
-```bash
-curl http://localhost:8000/api/seed
-```
-
-Seeds 3 users, 10 HCPs, and 8 realistic pharma rep interactions.
 
 ---
 
@@ -320,4 +312,4 @@ The AI agent uses a **StateGraph** with intent detection and conditional routing
 
 ## License
 
-Built for the HCPulse AI CRM assessment.
+MIT
