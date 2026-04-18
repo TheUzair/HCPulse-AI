@@ -312,4 +312,4 @@ The AI agent uses a **StateGraph** with intent detection and conditional routing
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).
