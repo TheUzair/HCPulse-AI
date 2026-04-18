@@ -68,7 +68,7 @@ export function HCPTable() {
           </div>
         ) : hcps.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            No HCPs found. Seed sample data from the backend.
+            No HCPs found. Try interacting with some HCPs to populate your directory!
           </div>
         ) : (
           <div className="overflow-x-auto">
