@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime
 from typing import Optional
 from langchain_core.tools import tool
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session
@@ -27,6 +27,9 @@ Return a JSON object with these fields:
 - follow_up_actions: list of strings (any follow-up items)
 - follow_up_date: string in YYYY-MM-DD format or null
 - summary: string (brief 2-3 sentence summary)
+- materials_shared: list of strings (any materials shared like brochures, pamphlets, studies, etc.)
+- samples_distributed: list of strings (any drug samples given)
+- attendees: list of strings (names of other people present at the meeting besides the HCP)
 
 Text: {raw_text}
 
@@ -85,29 +88,50 @@ async def log_interaction_tool(
         resolved_hcp_id = hcp_id
         if not resolved_hcp_id and extracted.get("hcp_name"):
             hcp_name = extracted["hcp_name"]
-            parts = hcp_name.split()
-            if len(parts) >= 2:
+            clean_name = hcp_name.replace("Dr.", "").replace("Dr", "").strip()
+            name_parts = clean_name.split()
+
+            hcp = None
+            # Try exact first+last match
+            if len(name_parts) >= 2:
                 result = await session.execute(
                     select(HCP).where(
-                        HCP.first_name.ilike(f"%{parts[0]}%"),
-                        HCP.last_name.ilike(f"%{parts[-1]}%"),
-                    )
+                        func.lower(HCP.first_name) == name_parts[0].lower(),
+                        func.lower(HCP.last_name) == name_parts[-1].lower(),
+                    ).limit(1)
                 )
-            else:
+                hcp = result.scalar_one_or_none()
+
+            # Fall back to last name match (handles "Dr. Johnson" → find "Sarah Johnson")
+            if not hcp:
+                search_name = name_parts[-1].lower() if name_parts else clean_name.lower()
                 result = await session.execute(
                     select(HCP).where(
-                        HCP.last_name.ilike(f"%{hcp_name}%")
-                    )
+                        func.lower(HCP.last_name) == search_name
+                    ).order_by(HCP.created_at.asc()).limit(1)
                 )
-            hcp = result.scalar_one_or_none()
+                hcp = result.scalar_one_or_none()
+
+            # Fall back to first name match
+            if not hcp and name_parts:
+                result = await session.execute(
+                    select(HCP).where(
+                        func.lower(HCP.first_name) == name_parts[0].lower()
+                    ).order_by(HCP.created_at.asc()).limit(1)
+                )
+                hcp = result.scalar_one_or_none()
+
             if hcp:
                 resolved_hcp_id = str(hcp.id)
             else:
-                return json.dumps({
-                    "success": False,
-                    "error": f"HCP '{hcp_name}' not found. Please provide a valid HCP ID.",
-                    "extracted_data": extracted,
-                })
+                # Auto-create only if truly not found — use last name as last_name
+                first = name_parts[0] if len(name_parts) >= 2 else clean_name
+                last = " ".join(name_parts[1:]) if len(name_parts) >= 2 else clean_name
+                new_hcp = HCP(first_name=first, last_name=last)
+                session.add(new_hcp)
+                await session.flush()
+                resolved_hcp_id = str(new_hcp.id)
+                extracted["hcp_auto_created"] = True
 
         # Map interaction type
         type_map = {
