@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 from typing import Optional
 from langgraph.graph import StateGraph, END
@@ -32,9 +33,12 @@ def _get_llm(model: str = "gemma2-9b-it") -> ChatGroq:
 
 
 async def _resolve_hcp(text: str) -> Optional[dict]:
-    """Extract HCP name from text via LLM, then look up in DB. Returns {id, name} or None."""
-    llm = _get_llm()
+    """Extract HCP name from text via LLM (with regex fallback), then look up in DB."""
+    name = None
+
+    # --- Step 1: LLM extraction ---
     try:
+        llm = _get_llm()
         resp = await llm.ainvoke([
             SystemMessage(content="Extract the doctor/HCP name from the message. Return only valid JSON."),
             HumanMessage(content=f'Extract the HCP name.\nMessage: {text}\nReturn: {{"hcp_name": "<name or null>"}}'),
@@ -48,46 +52,85 @@ async def _resolve_hcp(text: str) -> Optional[dict]:
             content = content[start:end]
         parsed = json.loads(content)
         name = parsed.get("hcp_name")
-        if not name:
-            return None
     except Exception:
+        pass
+
+    # --- Step 2: Regex fallback if LLM didn't extract ---
+    if not name:
+        m = re.search(r"(?:dr\.?\s+)([A-Za-z]+(?:\s+[A-Za-z]+)*)", text, re.IGNORECASE)
+        if m:
+            name = m.group(1)
+
+    if not name:
         return None
 
-    # Strip "Dr." prefix and search DB
+    # Strip "Dr." prefix and normalise
     clean = name.lower().replace("dr.", "").replace("dr ", "").strip()
     parts = clean.split()
+    if not parts:
+        return None
+
+    def _hit(hcp):
+        return {"id": str(hcp.id), "name": f"{hcp.first_name} {hcp.last_name}"}
 
     async with async_session() as session:
-        # Try exact first+last match first
+        # 1. Exact first + last
         if len(parts) >= 2:
-            query = select(HCP).where(
+            q = select(HCP).where(
                 func.lower(HCP.first_name) == parts[0],
                 func.lower(HCP.last_name) == parts[-1],
             ).limit(1)
-            result = await session.execute(query)
-            hcp = result.scalar_one_or_none()
+            hcp = (await session.execute(q)).scalar_one_or_none()
             if hcp:
-                return {"id": str(hcp.id), "name": f"{hcp.first_name} {hcp.last_name}"}
+                return _hit(hcp)
 
-        # Fall back to last name match (most common: "Dr. Johnson" → last_name=Johnson)
+        # 2. Last-name exact
         for part in reversed(parts):
-            query = select(HCP).where(
+            q = select(HCP).where(
                 func.lower(HCP.last_name) == part
             ).order_by(HCP.created_at.asc()).limit(1)
-            result = await session.execute(query)
-            hcp = result.scalar_one_or_none()
+            hcp = (await session.execute(q)).scalar_one_or_none()
             if hcp:
-                return {"id": str(hcp.id), "name": f"{hcp.first_name} {hcp.last_name}"}
+                return _hit(hcp)
 
-        # Try first name match
+        # 3. First-name exact
         for part in parts:
-            query = select(HCP).where(
+            q = select(HCP).where(
                 func.lower(HCP.first_name) == part
             ).order_by(HCP.created_at.asc()).limit(1)
-            result = await session.execute(query)
-            hcp = result.scalar_one_or_none()
+            hcp = (await session.execute(q)).scalar_one_or_none()
             if hcp:
-                return {"id": str(hcp.id), "name": f"{hcp.first_name} {hcp.last_name}"}
+                return _hit(hcp)
+
+        # 4. Partial match on concatenated full name  ("sarah%johnson")
+        like_pattern = "%".join(parts)
+        q = select(HCP).where(
+            func.concat(func.lower(HCP.first_name), ' ', func.lower(HCP.last_name)).like(f"%{like_pattern}%")
+        ).order_by(HCP.created_at.asc()).limit(1)
+        hcp = (await session.execute(q)).scalar_one_or_none()
+        if hcp:
+            return _hit(hcp)
+
+        # 5. ILIKE on last_name, then first_name
+        for part in reversed(parts):
+            if len(part) < 2:
+                continue
+            q = select(HCP).where(
+                func.lower(HCP.last_name).like(f"%{part}%")
+            ).order_by(HCP.created_at.asc()).limit(1)
+            hcp = (await session.execute(q)).scalar_one_or_none()
+            if hcp:
+                return _hit(hcp)
+
+        for part in parts:
+            if len(part) < 2:
+                continue
+            q = select(HCP).where(
+                func.lower(HCP.first_name).like(f"%{part}%")
+            ).order_by(HCP.created_at.asc()).limit(1)
+            hcp = (await session.execute(q)).scalar_one_or_none()
+            if hcp:
+                return _hit(hcp)
 
     return None
 

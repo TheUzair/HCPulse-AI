@@ -30,6 +30,7 @@ export function ChatMode() {
   const [input, setInput] = useState("");
   const [hcps, setHcps] = useState<HCP[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Load HCPs once for name → id resolution
@@ -38,10 +39,8 @@ export function ChatMode() {
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
 
   /**
    * Resolve an HCP name from extracted_data to an actual HCP id.
@@ -249,6 +248,7 @@ export function ChatMode() {
                 </div>
               </div>
             )}
+            <div ref={bottomRef} />
           </div>
         )}
       </ScrollArea>
